@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Clasificar producto escaneado</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body{font-family:Arial, sans-serif;background:linear-gradient(to right,#00416A,#E4E5E6);margin:0;padding:20px;color:white;min-height:100vh}
+    h1{text-align:center;margin:0 0 16px}
+    .card{max-width:600px;margin:auto;background:white;color:#111;border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.25);padding:18px}
+    .grid2{display:grid;grid-template-columns:1fr auto;gap:12px}
+    .grid2-50{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    label{font-weight:700;font-size:14px}
+    input{width:100%;padding:10px;border-radius:8px;border:1px solid #ccc;box-sizing:border-box;font-size:16px;background:#fff}
+    button{padding:10px 14px;border:none;border-radius:8px;cursor:pointer;font-weight:700}
+    .btn{background:#00416A;color:#fff}
+    .btn.sec{background:#e0e0e0}
+    .muted{color:#666;font-size:12px}
+    .sep{height:1px;background:#eee;margin:12px 0}
+    .ok{color:#0a7b0a;font-weight:700}
+    .err{color:#b00020;font-weight:700}
+  </style>
+</head>
+<body>
+  <h1>Clasificar producto escaneado</h1>
+
+  <div class="card">
+    <!-- Escaneo -->
+    <div class="grid2">
+      <div>
+        <label for="codigo">Código de Barras</label>
+        <input id="codigo" type="text" placeholder="Escanea o escribe el código y presiona Enter" autofocus />
+      </div>
+      <div style="align-self:end;display:flex;gap:8px">
+        <button id="btnBuscar" class="btn">Buscar</button>
+        <button id="btnLimpiar" class="btn sec">Limpiar</button>
+      </div>
+    </div>
+    <div id="status" class="muted" style="margin-top:8px;"></div>
+    <div class="sep"></div>
+
+    <!-- Resultado -->
+    <div id="resultado" style="display:none;">
+      <div>
+        <label>Descripción (Concepto)</label>
+        <input id="concepto" type="text" disabled />
+      </div>
+
+      <div class="grid2-50" style="margin-top:12px;">
+        <div>
+          <label for="clasificacion">CLASIFICACIÓN</label>
+          <input list="listaClasificaciones" id="clasificacion" placeholder="DULCES" />
+          <datalist id="listaClasificaciones">
+            <option value="DULCES"></option>
+            <option value="DESECHABLES"></option>
+            <option value="REYMA"></option>
+            <option value="CONVERMEX"></option>
+            <option value="JAGUAR"></option>
+            <option value="BIOPLAST"></option>
+            <option value="BOLSASPLASTICAS"></option>
+            <option value="AGUA"></option>
+            <option value="CERVEZA"></option>
+            <option value="REFRESCO"></option>
+          </datalist>
+        </div>
+        <div>
+          <label for="marca">MARCA</label>
+          <input list="listaMarcas" id="marca" placeholder="Ej. De la Rosa, Ricolino, Vero..." />
+          <datalist id="listaMarcas">
+            <option value="De la Rosa"></option>
+            <option value="Delicias"></option>
+            <option value="Ricolino"></option>
+            <option value="La imperial"></option>
+            <option value="Vero"></option>
+            <option value="Montes"></option>
+            <option value="Providencia"></option>
+            <option value="Alteño"></option>
+            <option value="Mara"></option>
+            <option value="Pavito"></option>
+          </datalist>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <label for="cantidadCaja">CANTIDAD POR CAJA</label>
+        <input type="number" id="cantidadCaja" placeholder="Ej. 12" min="1" />
+      </div>
+
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button id="btnGuardar" class="btn">Guardar en Firestore</button>
+        <span id="guardadoMsg" class="muted"></span>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getFirestore, collection, query, where, getDocs, doc, updateDoc
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCK5nb6u2CGRJ8AB1aPlRn54b97bdeAFeM",
+      authDomain: "inventariopv-643f1.firebaseapp.com",
+      projectId: "inventariopv-643f1",
+      storageBucket: "inventariopv-643f1.firebasestorage.app",
+      messagingSenderId: "96242533231",
+      appId: "1:96242533231:web:aae75a18fbaf9840529e9a"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // Referencias UI
+    const inpCodigo = document.getElementById('codigo');
+    const btnBuscar = document.getElementById('btnBuscar');
+    const btnLimpiar = document.getElementById('btnLimpiar');
+    const statusEl = document.getElementById('status');
+
+    const resultado = document.getElementById('resultado');
+    const conceptoEl = document.getElementById('concepto');
+    const clasificacionEl = document.getElementById('clasificacion');
+    const marcaEl = document.getElementById('marca');
+    const cantidadCajaEl = document.getElementById('cantidadCaja');
+
+    const btnGuardar = document.getElementById('btnGuardar');
+    const guardadoMsg = document.getElementById('guardadoMsg');
+
+    // Estado
+    let productoDocId = null;
+    let productoActual = null;
+
+    function limpiarVista(mantenerCodigo=false){
+      productoDocId = null;
+      productoActual = null;
+      resultado.style.display = 'none';
+      conceptoEl.value = '';
+      clasificacionEl.value = '';
+      marcaEl.value = '';
+      cantidadCajaEl.value = '';
+      guardadoMsg.textContent = '';
+      statusEl.textContent = '';
+      if(!mantenerCodigo) inpCodigo.value = '';
+    }
+
+    btnLimpiar.addEventListener('click', ()=>{ limpiarVista(); inpCodigo.focus(); });
+
+    // Flujo rápido con teclas
+    inpCodigo.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter'){ e.preventDefault(); buscarPorCodigo(); }
+    });
+    marcaEl.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter'){ e.preventDefault(); cantidadCajaEl.focus(); }
+    });
+    cantidadCajaEl.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter'){ e.preventDefault(); guardarCambios(); }
+    });
+
+    btnBuscar.addEventListener('click', buscarPorCodigo);
+    btnGuardar.addEventListener('click', guardarCambios);
+
+    async function buscarPorCodigo(){
+      guardadoMsg.textContent = '';
+      const codigo = (inpCodigo.value || '').trim();
+      if(!codigo){ statusEl.innerHTML = '<span class="err">Ingresa/escanea un código.</span>'; return; }
+      statusEl.textContent = 'Buscando...';
+
+      try{
+        const colRef = collection(db, "productos");
+        const q = query(colRef, where("Codigo Barra", "==", codigo));
+        const snap = await getDocs(q);
+
+        if(snap.empty){
+          statusEl.innerHTML = '<span class="err">No se encontró el código.</span>';
+          resultado.style.display = 'none';
+          return;
+        }
+
+        const d = snap.docs[0];
+        productoDocId = d.id;
+        productoActual = d.data();
+
+        conceptoEl.value = productoActual.Concepto || '';
+        clasificacionEl.value = (productoActual.Clasificacion ?? '').toString().trim() || 'DULCES';
+        marcaEl.value = productoActual.Marca || '';
+        cantidadCajaEl.value = (productoActual.CantidadPorCaja ?? '').toString();
+
+        resultado.style.display = 'block';
+        statusEl.textContent = 'Producto cargado.';
+        marcaEl.focus();
+      }catch(err){
+        console.error(err);
+        statusEl.innerHTML = '<span class="err">Error al buscar.</span>';
+      }
+    }
+
+    async function guardarCambios(){
+      if(!productoDocId){
+        guardadoMsg.innerHTML = '<span class="err">Busca primero un producto.</span>';
+        return;
+      }
+
+      const clasif = (clasificacionEl.value || '').trim() || 'DULCES';
+      const marca  = (marcaEl.value || '').trim();
+      const cantidad = cantidadCajaEl.value ? parseInt(cantidadCajaEl.value, 10) : null;
+
+      const ref = doc(db, "productos", productoDocId);
+      const upd = {
+        "Clasificacion": clasif,
+        "Marca": marca || null,
+        "CantidadPorCaja": Number.isFinite(cantidad) ? cantidad : null
+      };
+
+      try{
+        await updateDoc(ref, upd);
+        guardadoMsg.innerHTML = '<span class="ok">Guardado con éxito.</span>';
+        limpiarVista();
+        inpCodigo.focus();
+      }catch(err){
+        console.error(err);
+        guardadoMsg.innerHTML = '<span class="err">No se pudo guardar.</span>';
+      }
+    }
+  </script>
+</body>
+</html>
