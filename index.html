@@ -38,7 +38,11 @@
     .grid2{display:grid;grid-template-columns:1fr auto;gap:12px}
     .grid2-50{display:grid;grid-template-columns:1fr 1fr;gap:12px}
     label{font-weight:700;font-size:14px}
-    input{width:100%;padding:10px;border-radius:8px;border:1px solid #ccc;box-sizing:border-box;font-size:16px;background:#fff}
+    /* → Estilo común a input y select */
+    input, select{
+      width:100%; padding:10px; border-radius:8px; border:1px solid #ccc;
+      box-sizing:border-box; font-size:16px; background:#fff;
+    }
     button{padding:10px 14px;border:none;border-radius:8px;cursor:pointer;font-weight:700}
     .btn{background:#00416A;color:#fff}
     .btn.sec{background:#e0e0e0}
@@ -90,21 +94,22 @@
             <option value="REFRESCO"></option>
           </datalist>
         </div>
+
         <div>
           <label for="marca">MARCA</label>
-          <input list="listaMarcas" id="marca" placeholder="Ej. De la Rosa, Ricolino, Vero..." />
-          <datalist id="listaMarcas">
-            <option value="De la Rosa"></option>
-            <option value="Delicias"></option>
-            <option value="Ricolino"></option>
-            <option value="La imperial"></option>
-            <option value="Vero"></option>
-            <option value="Montes"></option>
-            <option value="Providencia"></option>
-            <option value="Alteño"></option>
-            <option value="Mara"></option>
-            <option value="Pavito"></option>
-          </datalist>
+          <select id="marca">
+            <option value="">-- Seleccionar marca --</option>
+            <option value="De la Rosa">De la Rosa</option>
+            <option value="Delicias">Delicias</option>
+            <option value="Ricolino">Ricolino</option>
+            <option value="La imperial">La imperial</option>
+            <option value="Vero">Vero</option>
+            <option value="Montes">Montes</option>
+            <option value="Providencia">Providencia</option>
+            <option value="Alteño">Alteño</option>
+            <option value="Mara">Mara</option>
+            <option value="Pavito">Pavito</option>
+          </select>
         </div>
       </div>
 
@@ -172,11 +177,25 @@
 
     // Flujo rápido
     inpCodigo.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); buscarPorCodigo(); }});
-    marcaEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); cantidadCajaEl.focus(); }});
+    // Con select es mejor reaccionar a 'change'
+    marcaEl.addEventListener('change', ()=>{ cantidadCajaEl.focus(); });
     cantidadCajaEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); guardarCambios(); }});
 
     btnBuscar.addEventListener('click', buscarPorCodigo);
     btnGuardar.addEventListener('click', guardarCambios);
+
+    // Si una marca viene guardada y no está en el listado, la agregamos
+    function ensureOption(selectEl, value){
+      if(!value) return;
+      const exists = Array.from(selectEl.options).some(o => o.value === value);
+      if(!exists){
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = value;
+        selectEl.appendChild(opt);
+      }
+      selectEl.value = value;
+    }
 
     async function buscarPorCodigo(){
       guardadoMsg.textContent = '';
@@ -200,7 +219,8 @@
 
         conceptoEl.value = productoActual.Concepto || '';
         clasificacionEl.value = (productoActual.Clasificacion ?? '').toString().trim() || 'DULCES';
-        marcaEl.value = productoActual.Marca || '';
+        // Cargar marca (si no está en el listado, la añade para mostrarla seleccionada)
+        ensureOption(marcaEl, (productoActual.Marca ?? '').toString().trim());
         cantidadCajaEl.value = (productoActual.CantidadPorCaja ?? '').toString();
 
         resultado.style.display = 'block';
